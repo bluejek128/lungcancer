@@ -1,0 +1,297 @@
+import plotly.graph_objs as go
+from plotly.offline import iplot, init_notebook_mode
+init_notebook_mode()
+from sklearn.decomposition import PCA
+import pandas as pd
+
+def plot_pca(pca, sample_metadata=None, color_by=None, color_type='categorical', colors = ['blue','red','purple'], hue=''):
+
+	# Get results
+	color_column = sample_metadata[color_by] if color_by else None
+	var_explained = ['PC'+str((i+1))+'('+str(round(e*100, 1))+'% var. explained)' for i, e in enumerate(pca.explained_variance_ratio_)]
+	sample_titles = ['<b>{}</b><br>'.format(index)+'<br>'.join('<i>{key}</i>: {value}'.format(**locals()) for key, value in rowData.items()) for index, rowData in sample_metadata.iterrows()]
+
+	if not color_by:
+		marker = dict(size=15)
+		trace = go.Scatter3d(x=pca.components_[0],
+							 y=pca.components_[1],
+							 z=pca.components_[2],
+							 mode='markers',
+							 hoverinfo='text',
+							 text=sample_titles,
+							 marker=marker)
+		data = [trace]
+	elif color_by and color_type == 'continuous':
+		marker = dict(size=15, color=color_column, colorscale='Viridis', showscale=True)
+		trace = go.Scatter3d(x=pca.components_[0],
+							 y=pca.components_[1],
+							 z=pca.components_[2],
+							 mode='markers',
+							 hoverinfo='text',
+							 text=sample_titles,
+							 marker=marker)
+		data = [trace]
+	elif color_by and color_type == 'categorical':
+		# Get unique categories
+		unique_categories = color_column.unique()
+
+		# Define empty list
+		data = []
+			
+		# Loop through the unique categories
+		for i, category in enumerate(unique_categories):
+
+			# Get the color corresponding to the category
+			category_color = colors[i]
+
+			# Get the indices of the samples corresponding to the category
+			category_indices = [i for i, sample_category in enumerate(color_column) if sample_category == category]
+			
+			# Create new trace
+			trace = go.Scatter3d(x=pca.components_[0][category_indices],
+								 y=pca.components_[1][category_indices],
+								 z=pca.components_[2][category_indices],
+								 mode='markers',
+								 hoverinfo='text',
+								 text=[sample_titles[x] for x in category_indices],
+								 name = category,
+								 marker=dict(size=15, color=category_color))
+			
+			# Append trace to data list
+			data.append(trace)
+	
+	colored = '' if str(color_by) == 'None' else '<i>, colored by {}</i>'.format(color_by)
+	layout = go.Layout(title='<b>PCA Analysis | Scatter Plot</b><br>', hovermode='closest', margin=go.Margin(l=0,r=0,b=0,t=50), width=900,
+		scene=dict(xaxis=dict(title=var_explained[0]), yaxis=dict(title=var_explained[1]),zaxis=dict(title=var_explained[2])))
+	fig = go.Figure(data=data, layout=layout)
+
+	return iplot(fig)
+
+
+from IPython.display import display, IFrame, Markdown
+import scipy.stats as ss
+import requests, os
+
+def plot_clustergrammer(data, sample_metadata, nr_genes=1000, z_score=True):
+
+		# Get variable subset
+		data = data.loc[data.var(axis=1).sort_values(ascending=False).index[:nr_genes]]
+
+		# Z-score
+		if z_score:
+			data = data.apply(ss.zscore, axis=1)
+		
+
+		# Add metadata
+		data.index = ['Gene: '+x for x in data.index]
+		data.columns=pd.MultiIndex.from_tuples([tuple(['{key}: {value}'.format(**locals()) for key, value in rowData.items()]) for index, rowData in sample_metadata.iterrows()])
+
+		# Write file and get link
+		data.to_csv('tempfile.txt', sep='\t')
+		clustergrammer_url = requests.post('http://amp.pharm.mssm.edu/clustergrammer/matrix_upload/', files={'file': open('tempfile.txt', 'rb')}).text
+		os.remove('tempfile.txt')
+
+		# Display
+		return display(IFrame(clustergrammer_url, width="1000", height="1000"))
+
+
+"""
+Created on Mon Sep 21 17:18:15 2015
+
+chdir script customized for the LINCS L1000 pipeline.
+
+Updated on Dec. 2 2015
+
+@author: qn
+"""
+
+import numpy as np
+
+def chdir(A, B, r=1):
+#  calculate a characteristic direction for a gene expression dataset 
+#  A: control numeric gene expressoion data
+#  B: experiment numeric gene expression data
+#  b: return value, a vector of n-components, representing the characteristic
+#	 direction of that gene expression dataset. n equals to the number of genes 
+#	 in the expression dataset.
+#  r: regulaized term. A parameter that smooths the covariance matrix and reduces
+#	 potential noise in the dataset.
+
+# * CHANGED *
+# 1. All validation happens in a common function that validates data for all
+#	differential expression methods.
+# 2. Use numpy to concatenate A and B.
+
+
+	ctrlCount = np.shape(A)[1]
+	expmCount = np.shape(B)[1]
+# place control gene expression data and experiment gene expression data into
+# one matrix X.
+	X = np.concatenate((A,B), axis = 1).T
+
+# get the number of samples (rowCount), namely, the total number of replicates in   
+# control and experiment. Also get the number of genes (colCount)
+	(rowCount,colCount) = np.shape(X)
+
+#  the number of output components desired from PCA. We only want to calculate
+#  the chdir in a subspace that capture most variance in order to save computation 
+#  workload. The number is set 20 because considering the number of genes usually 
+#  present in an expression matrix 20 components would  capture most of the variance.
+	if 30 > rowCount-1:
+		maxComponentsNum = rowCount - 1
+	else:
+		maxComponentsNum = 30
+
+# use the nipals PCA algorithm to calculate scores, loadings, and explained_var. 
+# explained_var are the variances captured by each component 
+	scores, loadings, explained_var = nipals(X,maxComponentsNum,1e5,1e-4)
+	scores = scores.T
+	loadings = loadings.T
+
+# We only want components that cpature 95% of the total variance or a little above.
+	captured_variance = 0
+	for i in range(len(explained_var)):
+		captured_variance += explained_var[i]
+		if captured_variance > 0.999:
+			break
+
+# slice scores and loadings to only that number of components.
+	scores = scores[0:i+1] # R in Neil's algorithm
+	loadings = loadings[0:i+1] # V in Neil's algorithm
+
+	scores = scores.T
+	loadings = loadings.T
+
+# the difference between experiment mean vector and control mean vector.
+	meanvec = np.mean(B,axis=1,keepdims=True) - np.mean(A,axis=1,keepdims=True)
+
+# All the following steps calculate shrunkMats. Refer to Neil's paper for detail.
+# ShrunkenMats are the covariance matrix that is placed as denominator 
+# in LDA formula. Notice the shrunkMats here is in the subspace of those components
+# that capture about 95% of total variance.
+	ctrlScores = scores[0:ctrlCount,:]
+	expmScores = scores[(ctrlCount):(ctrlCount+expmCount),:]
+	Dd = (np.dot(ctrlScores.T,ctrlScores)+np.dot(expmScores.T,expmScores))/(ctrlCount+expmCount-2)
+#	Dd = np.diag(np.diag(Dd))
+	sigma = np.mean(np.diag(Dd))
+	shrunkMats = np.dot(r,Dd)+ sigma*(1-r)*np.eye(np.shape(Dd)[0])
+	invMat = np.linalg.inv(shrunkMats)
+
+# The LDA formula.
+# np.dot(np.dot(loadings,shrunkMats),loadings.T) transforms the covariance 
+# matrix from the subspace to full space.
+	b = np.dot(loadings,np.dot(invMat,np.dot(loadings.T,meanvec)))
+
+# normlize b to unit vector
+	b /= np.linalg.norm(b)
+
+# ! CHANGED !
+# Do not sort the genes before returning them. This is because Neil's unit
+# test data is not sorted.
+# 
+# ! CHANGED!
+# Return values as Python list for consistent user interface.
+	print('Done chdir')
+	return b
+
+
+
+def nipals(X,a,it=100,tol=1e-4):
+	# Nipals algorithm for Principal Component Analysis
+	# This function is written largely based on nipals function from R chemometrics package.
+
+	X = np.array(X)
+	(obsCount,varCount) = np.shape(X)
+	Xh = X - np.tile(np.mean(X,axis=0),(obsCount,1))
+
+	T = np.zeros((obsCount,a))
+	P = np.zeros((varCount,a))
+	pcvar = np.zeros(varCount)
+	varTotal = np.sum(np.var(Xh,axis=0))
+	currVar = varTotal
+	nr = 0
+
+	for h in range(a):
+		th = np.reshape(Xh[:,0],(obsCount,-1))
+		ende = False
+
+		while not ende:
+			nr = nr + 1
+			ph = np.dot(Xh.T,th)/np.dot(th.T,th)
+			ph = ph/np.sqrt(np.dot(ph.T,ph))
+			thnew = np.dot(Xh,ph)/np.dot(ph.T,ph)
+			prec = np.dot((thnew-th).T,(thnew-th))
+			th = thnew
+
+			if prec <= np.power(tol,2):
+				ende = True
+			if it <= nr:
+				ende = True
+				print('Iteration stops without convergence')
+
+		Xh = Xh - np.dot(th,ph.T)
+		T[:,h] = th[:,0]
+		P[:,h] = ph[:,0]
+		oldVar = currVar
+		currVar = np.sum(np.var(Xh,axis=0))
+		pcvar[h] = ( oldVar - currVar )/varTotal
+		nr = 0
+
+	return T, P, pcvar
+
+def run_characteristic_direction(data, control_samples, experimental_samples):
+	chdirVector = chdir(data[control_samples].as_matrix(),data[experimental_samples].as_matrix(),1)
+	return pd.DataFrame({'CD': [x[0] for x in chdirVector], 'AveExpr': data.mean(axis=1)}).sort_values('CD', ascending=False)
+
+def plot_2D_scatter(x, y, text='', title='', xlab='', ylab='', hoverinfo='text', color='black', colorscale='Blues', size=8, showscale=False, symmetric_x=False, symmetric_y=False, pad=0.5, hline=False, vline=False, return_trace=False):
+	range_x = [-max(abs(x))-pad, max(abs(x))+pad]if symmetric_x else []
+	range_y = [-max(abs(y))-pad, max(abs(y))+pad]if symmetric_y else []
+	trace = go.Scattergl(x=x, y=y, mode='markers', text=text, hoverinfo=hoverinfo, marker={'color': color, 'colorscale': colorscale, 'showscale': showscale, 'size': size})
+	if return_trace:
+		return trace
+	else:
+		layout = go.Layout(title=title, xaxis={'title': xlab, 'range': range_x}, yaxis={'title': ylab, 'range': range_y}, hovermode='closest')
+		fig = go.Figure(data=[trace], layout=layout)
+		return iplot(fig)
+
+def plot_cd_results(cd_results):
+	return plot_2D_scatter(x=cd_results['AveExpr'], y=cd_results['CD'], title='<b>Characteristic Direction Results | Scatter Plot</b>', xlab='Average Expression', ylab='CD', text=cd_results.index)
+
+def run_enrichr(geneset):
+	ENRICHR_URL = 'http://amp.pharm.mssm.edu/Enrichr/addList'
+	genes_str = '\n'.join(geneset)
+	payload = {
+	'list': (None, genes_str),
+	}
+	response = requests.post(ENRICHR_URL, files=payload)
+	if not response.ok:
+		raise Exception('Error analyzing gene list')
+	data = json.loads(response.text)
+	display(Markdown('The enrichment results for the submitted gene list are available here: <a href="http://amp.pharm.mssm.edu/Enrichr/enrich?dataset={shortId}" target="_blank">http://amp.pharm.mssm.edu/Enrichr/enrich?dataset={shortId}</a>.'.format(**data)))
+	#return data
+
+def run_l1000cds2(signature, nr_genes=500):
+
+	# Define upperGenes Function
+	upperGenes = lambda genes: [gene.upper() for gene in genes]
+
+	# Get Data
+	data = {"upGenes":upperGenes(signature.index[:nr_genes]),"dnGenes":upperGenes(signature.index[-nr_genes:])}
+
+	# Loop through aggravate:
+	l1000cds2_results = {}
+	for aggravate in [True, False]:
+
+		# Send to API
+		config = {"aggravate":aggravate,"searchMethod":"geneSet","share":True,"combination":False,"db-version":"latest"}
+		r = requests.post('http://amp.pharm.mssm.edu/L1000CDS2/query',data=json.dumps({"data":data,"config":config}),headers={'content-type':'application/json'})
+		label = 'mimic' if aggravate else 'reverse'
+
+		# Add results
+		resGeneSet = r.json()
+		l1000cds2_dataframe = l1000cds2_dataframe = pd.DataFrame(resGeneSet['topMeta'])[['cell_id', 'pert_desc', 'pert_dose', 'pert_dose_unit', 'pert_id', 'pert_time', 'pert_time_unit', 'pubchem_id', 'score', 'sig_id']].replace('-666', np.nan)
+		l1000cds2_results[label] = {'url': 'http://amp.pharm.mssm.edu/L1000CDS2/#/result/{}'.format(resGeneSet['shareId']), 'table': l1000cds2_dataframe}
+		display(Markdown('A list of small molecules which **{label}** the input signature is available here: <a href="http://amp.pharm.mssm.edu/L1000CDS2/#/result/{resGeneSet[shareId]}" target="_blank">http://amp.pharm.mssm.edu/L1000CDS2/#/result/{resGeneSet[shareId]}</a>'.format(**locals())))
+
+	# Return
+	#return l1000cds2_results

@@ -1,0 +1,18 @@
+Sample Name,Cell Type,Tissue Type,Surface Marker,Days Post Tumor Injection
+Mo.Ly6C+.Bl#1,Monocyte,Blood,Ly6C +,n/a
+Mo.Ly6C+.Bl#2,Monocyte,Blood,Ly6C +,n/a
+Mo.Ly6C+.Bl#3,Monocyte,Blood,Ly6C +,n/a
+Mo.Ly6C+.Bl.KPd17#1,Monocyte,Blood,Ly6C +,17
+Mo.Ly6C+.Bl.KPd17#2,Monocyte,Blood,Ly6C +,17
+Mo.Ly6C+.Bl.KPd17#3,Monocyte,Blood,Ly6C +,17
+Mo.Ly6C+.Bl.KPd28#1,Monocyte,Blood,Ly6C +,28
+Mo.Ly6C+.Bl.KPd28#2,Monocyte,Blood,Ly6C +,28
+Mo.Ly6C+.Bl.KPd28#3,Monocyte,Blood,Ly6C +,28
+Mo.Ly6C+.Lu#1,Monocyte,Lung,Ly6C +,n/a
+Mo.Ly6C+.Lu#2,Monocyte,Lung,Ly6C +,n/a
+Mo.Ly6C+.Lu#3,Monocyte,Lung,Ly6C +,n/a
+Mo.Ly6C+.Lu.KPd17#1,Monocyte,Lung,Ly6C +,17
+Mo.Ly6C+.Lu.KPd17#2,Monocyte,Lung,Ly6C +,17
+Mo.Ly6C+.Lu.KPd28#1,Monocyte,Lung,Ly6C +,28
+Mo.Ly6C+.Lu.KPd28#2,Monocyte,Lung,Ly6C +,28
+Mo.Ly6C+.Lu.KPd28#3,Monocyte,Lung,Ly6C +,28
