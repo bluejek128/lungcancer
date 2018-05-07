@@ -1,0 +1,100 @@
+import plotly.graph_objs as go
+from plotly.offline import iplot, init_notebook_mode
+init_notebook_mode()
+from sklearn.decomposition import PCA
+import pandas as pd
+
+def plot_pca(pca, sample_metadata=None, color_by=None, pca_plot_title='PCA_Analysis | Scatter Plot', color_type='categorical', colors = ['blue','red','purple'], hue=''):
+
+	# Get results
+	color_column = sample_metadata[color_by] if color_by else None
+	var_explained = ['PC'+str((i+1))+'('+str(round(e*100, 1))+'% var. explained)' for i, e in enumerate(pca.explained_variance_ratio_)]
+	#var_explained = []
+	#for i, e in enumerate(pca.explained_variance_ratio_)]
+	#	var_explained.append('PC'+str((i+1))+'('+str(round(e*100, 1))+'% var. explained))
+	#
+	sample_titles = ['<b>{}</b><br>'.format(index)+'<br>'.join('<i>{key}</i>: {value}'.format(**locals()) for key, value in rowData.items()) for index, rowData in sample_metadata.iterrows()]
+
+	if not color_by:
+		marker = dict(size=15)
+		trace = go.Scatter3d(x=pca.components_[0],
+							 y=pca.components_[1],
+							 z=pca.components_[2],
+							 mode='markers',
+							 hoverinfo='text',
+							 text=sample_titles,
+							 marker=marker)
+		data = [trace]
+	elif color_by and color_type == 'continuous':
+		marker = dict(size=15, color=color_column, colorscale='Viridis', showscale=True)
+		trace = go.Scatter3d(x=pca.components_[0],
+							 y=pca.components_[1],
+							 z=pca.components_[2],
+							 mode='markers',
+							 hoverinfo='text',
+							 text=sample_titles,
+							 marker=marker)
+		data = [trace]
+	elif color_by and color_type == 'categorical':
+		# Get unique categories
+		unique_categories = color_column.unique()
+
+		# Define empty list
+		data = []
+			
+		# Loop through the unique categories
+		for i, category in enumerate(unique_categories):
+
+			# Get the color corresponding to the category
+			category_color = colors[i]
+
+			# Get the indices of the samples corresponding to the category
+			category_indices = [i for i, sample_category in enumerate(color_column) if sample_category == category]
+			
+			# Create new trace
+			trace = go.Scatter3d(x=pca.components_[0][category_indices],
+								 y=pca.components_[1][category_indices],
+								 z=pca.components_[2][category_indices],
+								 mode='markers',
+								 hoverinfo='text',
+								 text=[sample_titles[x] for x in category_indices],
+								 name = category,
+								 marker=dict(size=15, color=category_color))
+			
+			# Append trace to data list
+			data.append(trace)
+	
+	colored = '' if str(color_by) == 'None' else '<i>, colored by {}</i>'.format(color_by)
+	layout = go.Layout(title='<b>' + pca_plot_title + '</b><br>', hovermode='closest', margin=go.Margin(l=0,r=0,b=0,t=50), width=900,
+		scene=dict(xaxis=dict(title=var_explained[0]), yaxis=dict(title=var_explained[1]),zaxis=dict(title=var_explained[2])))
+	fig = go.Figure(data=data, layout=layout)
+
+	return iplot(fig)
+
+
+from IPython.display import display, IFrame, Markdown
+import scipy.stats as ss
+import requests, os
+
+def plot_clustergrammer(data, sample_metadata, nr_genes=1000, z_score=True):
+
+		# Get variable subset
+		data = data.loc[data.var(axis=1).sort_values(ascending=False).index[:nr_genes]]
+
+		# Z-score
+		if z_score:
+			data = data.apply(ss.zscore, axis=1)
+		
+		# Add metadata
+		data.index = ['Gene: '+x for x in data.index]
+		data.columns=pd.MultiIndex.from_tuples([tuple(['{key}: {value}'.format(**locals()) for key, value in rowData.items()]) for index, rowData in sample_metadata.iterrows()])
+
+		# Write file and get link
+		data.to_csv('tempfile.txt', sep='\t')
+		clustergrammer_url = requests.post('http://amp.pharm.mssm.edu/clustergrammer/matrix_upload/', files={'file': open('tempfile.txt', 'rb')}).text
+		os.remove('tempfile.txt')
+
+		# Display
+		return display(IFrame(clustergrammer_url, width="1000", height="1000"))
+
+

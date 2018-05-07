@@ -1,7 +1,0 @@
-Sample Name	Cell Type	Tissue Type	Surface Marker	Tumor Injection Status
-MF.alv.Lu#2	Alveolar Macrophage	Lung	n/a	No Tumor Injection 
-MF.alv.Lu#3	Alveolar Macrophage	Lung	n/a	No Tumor Injection 
-MF.alv.Lu.KPd17#1	Alveolar Macrophage	Lung	n/a	17 Days Post Tumor Injection
-MF.alv.Lu.KPd28#1	Alveolar Macrophage	Lung	n/a	28 Days Post Tumor Injection
-MF.alv.Lu.KPd28#2	Alveolar Macrophage	Lung	n/a	28 Days Post Tumor Injection
-MF.alv.Lu.KPd28#3	Alveolar Macrophage	Lung	n/a	28 Days Post Tumor Injection
